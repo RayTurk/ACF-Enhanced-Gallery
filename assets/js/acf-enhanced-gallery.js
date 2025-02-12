@@ -52,6 +52,115 @@
       $toolbar.find('li.acf-fr').before($customButtons);
       $toolbar.find('li.acf-fr').before($zoomControls);
 
+      // Remove ACF's default click handler
+      acf.fields.gallery.prototype.events['click .acf-gallery-add'] = null;
+
+// With this new approach:
+var field = acf.getField($field);
+field.off('click', '.acf-gallery-add');
+
+// Then update the click handler:
+$field.on('click', '.acf-gallery-add', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Create a hidden file input
+    var $fileInput = $('<input type="file" multiple accept="image/*" style="display:none">');
+
+    // Add to DOM and trigger click
+    $fileInput.appendTo('body').trigger('click');
+
+    // Handle file selection
+    $fileInput.on('change', function(e) {
+        var files = e.target.files;
+        var postId = acf.get('post_id');
+
+        if (!files || !files.length) {
+            $fileInput.remove();
+            return;
+        }
+
+        // Create progress container
+        var $progressContainer = $('<div class="upload-progress-container"></div>');
+        $field.find('.acf-gallery-attachments').before($progressContainer);
+
+        // Upload each file
+        Array.from(files).forEach(function(file, index) {
+            var $progress = $('<div class="acf-gallery-upload-progress"><div class="progress-text">' + file.name + ': 0%</div></div>');
+            $progressContainer.append($progress);
+
+            var formData = new FormData();
+            formData.append('action', 'fsm_custom_gallery_upload_image');
+            formData.append('post_id', postId);
+            formData.append('file', file);
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                xhr: function() {
+                    var xhr = new window.XMLHttpRequest();
+                    xhr.upload.addEventListener("progress", function(evt) {
+                        if (evt.lengthComputable) {
+                            var percentComplete = evt.loaded / evt.total * 100;
+                            $progress.css('width', percentComplete + '%');
+                            $progress.find('.progress-text').text(file.name + ': ' + Math.round(percentComplete) + '%');
+                        }
+                    }, false);
+                    return xhr;
+                },
+                success: function(response) {
+                    try {
+                        var data = JSON.parse(response);
+                        if (data['attachment-id']) {
+                            // Add to ACF gallery
+                            var attachment = {
+                                id: data['attachment-id'],
+                                url: data['src'],
+                                alt: data['alt'] || '',
+                                title: data['title'] || '',
+                                filename: data['filename'] || '',
+                                type: 'image'
+                            };
+                            field.appendAttachment(attachment);
+
+                            // Show success
+                            $progress.addClass('success');
+                            $progress.find('.progress-text').text(file.name + ': Complete');
+                        }
+                    } catch(e) {
+                        console.error('Upload response error:', e);
+                        $progress.addClass('error');
+                        $progress.find('.progress-text').text(file.name + ': Failed');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Upload failed:', error);
+                    $progress.addClass('error');
+                    $progress.find('.progress-text').text(file.name + ': Failed - ' + error);
+                },
+                complete: function() {
+                    // Remove progress bar after delay
+                    setTimeout(function() {
+                        $progress.fadeOut(function() {
+                            $(this).remove();
+                            // Remove container if empty
+                            if ($progressContainer.children().length === 0) {
+                                $progressContainer.remove();
+                            }
+                        });
+                    }, 2000);
+                }
+            });
+        });
+
+        // Remove the file input
+        $fileInput.remove();
+    });
+});
+
       // Initialize zoom
       var storedZoom = localStorage.getItem('acf_gallery_zoom');
       var currentZoom = storedZoom ? parseInt(storedZoom) : DEFAULT_ZOOM;
@@ -217,89 +326,82 @@
 
           if (!val) return;
 
-          // If no selection, sort entire gallery
-          if (selectedItems.size === 0) {
-              var $allAttachments = $attachments.find('.acf-gallery-attachment');
-              var allArray = $allAttachments.get();
+          function getSortValue($element, sortType) {
+              var id = $element.find('input[type="hidden"]').val();
 
-              // Sort all items
-              allArray.sort(function(a, b) {
+              switch(sortType) {
+                  case 'date':
+                      return parseInt(id) || 0;
+                  case 'modified':
+                      // Extract timestamp from filename if available
+                      var imgSrc = $element.find('img').attr('src');
+                      var timestamp = imgSrc.match(/\/(\d+)_/);
+                      return timestamp ? parseInt(timestamp[1]) : parseInt(id);
+                  case 'title':
+                      var imgSrc = $element.find('img').attr('src');
+                      if (!imgSrc) return '';
+
+                      // Extract filename from URL and remove dimensions
+                      var filename = imgSrc.split('/').pop();
+                      // Remove the dimensions part (e.g., -260x300)
+                      filename = filename.replace(/-\d+x\d+/, '');
+                      // Remove the extension
+                      filename = filename.replace(/\.[^/.]+$/, '');
+                      // Remove the timestamp prefix if it exists (e.g., 1735952224_)
+                      filename = filename.replace(/^\d+_/, '');
+                      return filename.toLowerCase();
+                  default:
+                      return 0;
+              }
+          }
+
+          function sortAttachments($items, sortType) {
+              var itemsArray = $items.get();
+
+              itemsArray.sort(function(a, b) {
                   var $a = $(a);
                   var $b = $(b);
-                  var nameA = $a.find('.filename').text();
-                  var nameB = $b.find('.filename').text();
 
-                  switch(val) {
-                      case 'date':
-                          var dateA = $a.data('date') || 0;
-                          var dateB = $b.data('date') || 0;
-                          return dateB - dateA;
-                      case 'modified':
-                          var modA = $a.data('modified') || 0;
-                          var modB = $b.data('modified') || 0;
-                          return modB - modA;
-                      case 'title':
-                          return nameA.localeCompare(nameB);
-                      case 'reverse':
-                          return 0;
+                  var valueA = getSortValue($a, sortType);
+                  var valueB = getSortValue($b, sortType);
+
+                  if (sortType === 'title') {
+                      if (!valueA && !valueB) return 0;
+                      if (!valueA) return 1;
+                      if (!valueB) return -1;
+                      return valueA.localeCompare(valueB);
+                  } else {
+                      return valueB - valueA; // Descending order for dates
                   }
               });
 
-              if (val === 'reverse') {
-                  allArray.reverse();
-              }
+              return itemsArray;
+          }
 
-              // Reattach all items in new order
-              $allAttachments.detach();
-              $(allArray).each(function(index, item) {
-                  $attachments.append(item);
-              });
+          // If no selection, sort entire gallery
+          var $itemsToSort = selectedItems.size === 0
+              ? $attachments.find('.acf-gallery-attachment')
+              : $attachments.find('.acf-gallery-attachment.selected');
+
+          var sortedItems;
+          if (val === 'reverse') {
+              sortedItems = $itemsToSort.get().reverse();
           } else {
-              // Sort only selected items
-              var $selectedAttachments = $attachments.find('.acf-gallery-attachment.selected');
-              var selectedArray = $selectedAttachments.get();
-              var originalPositions = [];
+              sortedItems = sortAttachments($itemsToSort, val);
+          }
 
-              // Store original positions of selected items
-              $selectedAttachments.each(function() {
-                  var $this = $(this);
-                  var position = $attachments.find('.acf-gallery-attachment').index($this);
+          // Apply the new order
+          if (selectedItems.size > 0) {
+              var originalPositions = [];
+              $itemsToSort.each(function() {
+                  var position = $attachments.find('.acf-gallery-attachment').index(this);
                   originalPositions.push(position);
               });
-
-              // Sort selected items
-              selectedArray.sort(function(a, b) {
-                  var $a = $(a);
-                  var $b = $(b);
-                  var nameA = $a.find('.filename').text();
-                  var nameB = $b.find('.filename').text();
-
-                  switch(val) {
-                      case 'date':
-                          var dateA = $a.data('date') || 0;
-                          var dateB = $b.data('date') || 0;
-                          return dateB - dateA;
-                      case 'modified':
-                          var modA = $a.data('modified') || 0;
-                          var modB = $b.data('modified') || 0;
-                          return modB - modA;
-                      case 'title':
-                          return nameA.localeCompare(nameB);
-                      case 'reverse':
-                          return 0;
-                  }
-              });
-
-              if (val === 'reverse') {
-                  selectedArray.reverse();
-              }
-
-              // Remove selected items
-              $selectedAttachments.detach();
-
-              // Reinsert sorted items at their original positions
               originalPositions.sort(function(a, b) { return a - b; });
-              $(selectedArray).each(function(index, item) {
+
+              $itemsToSort.detach();
+
+              $(sortedItems).each(function(index, item) {
                   var position = originalPositions[index];
                   var $currentItems = $attachments.find('.acf-gallery-attachment');
 
@@ -309,10 +411,15 @@
                       $(item).insertBefore($currentItems.eq(position));
                   }
               });
+          } else {
+              $itemsToSort.detach();
+              $(sortedItems).each(function(index, item) {
+                  $attachments.append(item);
+              });
           }
 
-          // Reset select to default
           $(this).val('');
+          acf.getField($field).$input().trigger('change');
       });
 
       // Function to clear ACF's native selection state

@@ -189,3 +189,40 @@
     height: auto;
 }
 
+.upload-progress-container {
+  margin: 10px 0;
+  padding: 10px;
+  background: #f0f0f1;
+  border-radius: 4px;
+}
+
+.acf-gallery-upload-progress {
+  background: #2271b1;
+  height: 24px;
+  margin-bottom: 5px;
+  border-radius: 3px;
+  transition: width 0.3s ease-out;
+  position: relative;
+  width: 0;
+}
+
+.acf-gallery-upload-progress .progress-text {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.acf-gallery-upload-progress.error {
+  background: #dc3232;
+}
+
+.acf-gallery-upload-progress.success {
+  background: #46b450;
+}
