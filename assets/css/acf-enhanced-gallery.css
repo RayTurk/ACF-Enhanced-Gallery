@@ -1,0 +1,140 @@
+.acf-gallery .enhanced-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-right: 10px;
+}
+
+.acf-gallery-toolbar .acf-hl {
+  display: flex;
+
+  li:first-of-type {
+    margin-bottom: 8px;
+    margin-right: 8px;
+  }
+}
+
+.acf-gallery .enhanced-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 10px;
+}
+
+.acf-gallery .enhanced-zoom-controls button {
+  background: #f0f0f1;
+  border: 1px solid #2271b1;
+  border-radius: 3px;
+  padding: 0 8px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  height: 24px;
+}
+
+.acf-gallery .enhanced-zoom-controls button:hover {
+  background: #f6f7f7;
+}
+
+.acf-gallery .enhanced-zoom-controls .zoom-slider {
+  width: 100px;
+  margin: 0;
+}
+
+.acf-gallery .enhanced-zoom-controls .zoom-level {
+  min-width: 48px;
+  text-align: right;
+  color: #50575e;
+}
+
+.acf-gallery .acf-gallery-attachment {
+  transition: width 0.2s ease-out, height 0.2s ease-out;
+}
+
+.acf-gallery .acf-gallery-attachment.selected {
+  position: relative;
+}
+
+.acf-gallery .acf-gallery-attachment.selected:before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: 2px solid #2271b1;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.acf-gallery .acf-button.active {
+  background: #2271b1;
+  color: #fff;
+  border-color: #2271b1;
+}
+
+/* Hide the WordPress Media Library button that ACF adds */
+.acf-gallery .acf-gallery-add + .acf-button {
+  display: none;
+}
+
+.acf-gallery .acf-sortable-placeholder {
+  background: #f1f1f1 !important;
+  border: 1px dashed #b4b9be !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: block !important;
+}
+
+.acf-gallery-sort-helper {
+  opacity: 0.8;
+  background: #fff;
+  padding: 5px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.acf-gallery .acf-gallery-attachment.selected {
+  position: relative;
+  /* border: 1px solid #2271b1; */
+  /* z-index: -1; */
+  transition: all 0.3s linear;
+
+  .thumbnail {
+    img {
+      filter: grayscale(100%);
+    }
+  }
+}
+
+.acf-gallery .acf-gallery-attachment.selected::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.acf-gallery .enhanced-tools .acf-button.active {
+  background: #2271b1;
+  color: #fff;
+  border-color: #2271b1;
+}
+
+.acf-gallery .acf-sortable-placeholder {
+  background: #f1f1f1 !important;
+  border: 1px dashed #b4b9be !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: block !important;
+}
+
+.acf-gallery-sort-helper {
+  opacity: 0.8;
+  background: #fff;
+  padding: 5px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
