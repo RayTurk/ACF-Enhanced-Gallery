@@ -1,3 +1,17 @@
+/* Toolbar Layout */
+.acf-gallery .acf-gallery-toolbar {
+  padding: 15px;
+  z-index: 2;
+}
+
+.acf-gallery-toolbar .acf-hl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+/* Enhanced Tools */
 .acf-gallery .enhanced-tools {
   display: flex;
   flex-wrap: wrap;
@@ -5,15 +19,21 @@
   margin-right: 10px;
 }
 
-.acf-gallery-toolbar .acf-hl {
-  display: flex;
-
-  li:first-of-type {
-    margin-bottom: 8px;
-    margin-right: 8px;
-  }
+.acf-gallery .enhanced-tools .acf-button {
+  padding: 4px 12px;
+  font-size: 13px;
+  height: auto;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
+.acf-gallery .enhanced-tools .acf-button.active {
+  background: #2271b1;
+  color: #fff;
+  border-color: #2271b1;
+}
+
+/* Zoom Controls */
 .acf-gallery .enhanced-zoom-controls {
   display: flex;
   align-items: center;
@@ -30,6 +50,10 @@
   font-size: 16px;
   line-height: 1;
   height: 24px;
+  min-width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .acf-gallery .enhanced-zoom-controls button:hover {
@@ -47,12 +71,20 @@
   color: #50575e;
 }
 
+/* Gallery Attachments */
 .acf-gallery .acf-gallery-attachment {
   transition: width 0.2s ease-out, height 0.2s ease-out;
 }
 
 .acf-gallery .acf-gallery-attachment.selected {
   position: relative;
+  transition: all 0.3s linear;
+
+  .thumbnail {
+    img {
+      filter: grayscale(100%);
+    }
+  }
 }
 
 .acf-gallery .acf-gallery-attachment.selected:before {
@@ -67,45 +99,6 @@
   pointer-events: none;
 }
 
-.acf-gallery .acf-button.active {
-  background: #2271b1;
-  color: #fff;
-  border-color: #2271b1;
-}
-
-/* Hide the WordPress Media Library button that ACF adds */
-.acf-gallery .acf-gallery-add + .acf-button {
-  display: none;
-}
-
-.acf-gallery .acf-sortable-placeholder {
-  background: #f1f1f1 !important;
-  border: 1px dashed #b4b9be !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  display: block !important;
-}
-
-.acf-gallery-sort-helper {
-  opacity: 0.8;
-  background: #fff;
-  padding: 5px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-}
-
-.acf-gallery .acf-gallery-attachment.selected {
-  position: relative;
-  /* border: 1px solid #2271b1; */
-  /* z-index: -1; */
-  transition: all 0.3s linear;
-
-  .thumbnail {
-    img {
-      filter: grayscale(100%);
-    }
-  }
-}
-
 .acf-gallery .acf-gallery-attachment.selected::after {
   content: '';
   position: absolute;
@@ -118,12 +111,19 @@
   z-index: 1;
 }
 
-.acf-gallery .enhanced-tools .acf-button.active {
+/* Button States */
+.acf-gallery .acf-button.active {
   background: #2271b1;
   color: #fff;
   border-color: #2271b1;
 }
 
+/* Hide WordPress Media Library button */
+.acf-gallery .acf-gallery-add + .acf-button {
+  display: none;
+}
+
+/* Sortable Placeholders */
 .acf-gallery .acf-sortable-placeholder {
   background: #f1f1f1 !important;
   border: 1px dashed #b4b9be !important;
@@ -138,3 +138,54 @@
   padding: 5px;
   box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
+
+/* Responsive Adjustments */
+@media screen and (max-width: 782px) {
+  .acf-gallery .acf-gallery-toolbar .acf-hl {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .acf-gallery .enhanced-tools {
+    width: 100%;
+    margin-bottom: 12px;
+  }
+
+  .acf-gallery .enhanced-zoom-controls {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
+  .acf-gallery .enhanced-tools .acf-button {
+    flex: 1;
+    text-align: center;
+    justify-content: center;
+  }
+}
+
+#menu-item-browse {
+  display: none;
+  opacity: 0;
+  visibilty: hidden;
+}
+
+.acf-gallery-upload-progress {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 3px;
+    background: #2271b1;
+    transition: width 0.3s ease-out;
+    width: 0;
+    z-index: 100;
+}
+
+.acf-gallery-upload-progress.error {
+    background: #dc3232;
+    padding: 5px;
+    color: white;
+    text-align: center;
+    height: auto;
+}
+
