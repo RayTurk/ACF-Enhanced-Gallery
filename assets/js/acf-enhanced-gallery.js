@@ -534,22 +534,29 @@
       });
 
       function clearACFSelection($field) {
+          // Reset any current selections
           $field.find('.acf-gallery-attachment.active').removeClass('active');
-          $field.removeClass('-edit');
-          var $sidebar = $field.find('.acf-gallery-side');
-          $sidebar.removeClass('visible').hide();
-          setTimeout(function() {
-              $sidebar.removeClass('visible').hide();
-          }, 50);
+          $field.find('.acf-gallery').removeClass('-edit');
+
+          // Let ACF clean up the sidebar
+          var acfField = acf.getField($field);
+          if (acfField && typeof acfField.closeDialog === 'function') {
+              acfField.closeDialog();
+          }
       }
 
       // Button event handlers
       $customButtons.on('click', 'a.select-range', function(e) {
           e.preventDefault();
           if (selectionMode === 'range') {
+              // Deactivating range mode
               selectionMode = null;
               rangeStartItem = null;
               $(this).removeClass('active');
+              // Clear all selections and reset state
+              $attachments.find('.acf-gallery-attachment').removeClass('selected');
+              selectedItems.clear();
+              clearACFSelection($field);
           } else {
               $attachments.find('.acf-gallery-attachment').removeClass('selected');
               selectedItems.clear();
@@ -564,8 +571,13 @@
       $customButtons.on('click', 'a.select-toggle', function(e) {
           e.preventDefault();
           if (selectionMode === 'toggle') {
+              // Deactivating toggle mode
               selectionMode = null;
               $(this).removeClass('active');
+              // Clear all selections and reset state
+              $attachments.find('.acf-gallery-attachment').removeClass('selected');
+              selectedItems.clear();
+              clearACFSelection($field);
           } else {
               $attachments.find('.acf-gallery-attachment').removeClass('selected');
               selectedItems.clear();
@@ -598,14 +610,81 @@
           if (count === 0) return;
 
           if (confirm(acfEnhancedGalleryL10n.deleteConfirm.replace('%d', count))) {
-              selectedItems.forEach(function(item) {
-                  if ($(item).length) {
-                      $(item).find('a.acf-icon.-cancel').trigger('click');
-                  }
-              });
+              const deleteQueue = Array.from(selectedItems);
+              const DELETION_BATCH_SIZE = 3;
+              let deletedCount = 0;
+              let acfField = acf.getField($field);
 
-              selectedItems.clear();
-              $('.acf-gallery').trigger('update');
+              // Create progress UI for deletion
+              const $deleteProgressContainer = $('<div class="upload-progress-container"></div>');
+              const $deleteProgressBar = $('<div class="acf-gallery-upload-progress"><div class="progress-text">Preparing to delete ' + count + ' images...</div></div>');
+              $deleteProgressContainer.append($deleteProgressBar);
+              $field.find('.acf-gallery-attachments').before($deleteProgressContainer);
+
+              function updateDeleteProgress() {
+                  const percentComplete = (deletedCount / count) * 100;
+                  $deleteProgressBar.css('width', percentComplete + '%');
+                  $deleteProgressBar.find('.progress-text').text(
+                      'Deleting ' + deletedCount + ' of ' + count + ' images (' + Math.round(percentComplete) + '%)'
+                  );
+
+                  if (deletedCount === count) {
+                      $deleteProgressBar.addClass('success');
+                      $deleteProgressBar.find('.progress-text').text('Deletion Complete!');
+                      setTimeout(() => {
+                          $deleteProgressContainer.fadeOut(() => {
+                              $(this).remove();
+                          });
+                      }, 2000);
+                  }
+              }
+
+              function processDeleteQueue() {
+                  if (deleteQueue.length === 0) {
+                      selectedItems.clear();
+                      acfField.$input().trigger('change');
+                      return;
+                  }
+
+                  const batch = deleteQueue.splice(0, DELETION_BATCH_SIZE);
+
+                  batch.forEach(item => {
+                      const $item = $(item);
+                      const id = $item.data('id');
+
+                      // Get current value and ensure it's an array
+                      let value = acfField.val();
+                      if (typeof value === 'string') {
+                          value = value ? value.split(',') : [];
+                      } else if (!Array.isArray(value)) {
+                          value = [];
+                      }
+
+                      // Convert all values to strings for consistent comparison
+                      const strValue = value.map(String);
+                      const strId = String(id);
+
+                      // Remove the ID from the array
+                      const index = strValue.indexOf(strId);
+                      if (index > -1) {
+                          strValue.splice(index, 1);
+                      }
+
+                      // Update the field value
+                      acfField.val(strValue);
+
+                      // Remove the element from DOM
+                      $item.remove();
+                  });
+
+                  deletedCount += batch.length;
+                  updateDeleteProgress();
+
+                  // Process next batch with a small delay
+                  setTimeout(processDeleteQueue, 100);
+              }
+
+              processDeleteQueue();
           }
       });
 
