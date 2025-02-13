@@ -127,7 +127,7 @@ if (!function_exists('fsm_custom_gallery_shortcode')) {
     $post_id = get_the_ID();
 
     // Get the ACF gallery field
-    $gallery = get_field('fsm_test', $post_id);
+    $gallery = get_field('enhanced_gallery', $post_id);
 
     // Check if gallery data is valid and contains images
     if (!empty($gallery) && is_array($gallery)) {

@@ -34,6 +34,10 @@
   height: auto;
   line-height: 1.4;
   white-space: nowrap;
+
+  @media screen and (max-width: 768px){
+    line-height: unset !important;
+  }
 }
 
 .acf-gallery .enhanced-tools .acf-button.active {

@@ -18,7 +18,7 @@
   var DEFAULT_ZOOM = 100;
   var MIN_ZOOM = 50;
   var MAX_ZOOM = 200;
-  var BATCH_SIZE = 3; // Number of files to upload simultaneously
+  var BATCH_SIZE = 5; // Number of files to upload simultaneously
 
   function enhanceGalleryField($el) {
       var $field = $el.find('.acf-gallery').first();
@@ -548,19 +548,18 @@
       // Button event handlers
       $customButtons.on('click', 'a.select-range', function(e) {
           e.preventDefault();
+          // Always close the sidebar first
+          clearACFSelection($field);
+
           if (selectionMode === 'range') {
-              // Deactivating range mode
               selectionMode = null;
               rangeStartItem = null;
               $(this).removeClass('active');
-              // Clear all selections and reset state
               $attachments.find('.acf-gallery-attachment').removeClass('selected');
               selectedItems.clear();
-              clearACFSelection($field);
           } else {
               $attachments.find('.acf-gallery-attachment').removeClass('selected');
               selectedItems.clear();
-              clearACFSelection($field);
               selectionMode = 'range';
               rangeStartItem = null;
               $customButtons.find('a').removeClass('active');
@@ -570,18 +569,17 @@
 
       $customButtons.on('click', 'a.select-toggle', function(e) {
           e.preventDefault();
+          // Always close the sidebar first
+          clearACFSelection($field);
+
           if (selectionMode === 'toggle') {
-              // Deactivating toggle mode
               selectionMode = null;
               $(this).removeClass('active');
-              // Clear all selections and reset state
               $attachments.find('.acf-gallery-attachment').removeClass('selected');
               selectedItems.clear();
-              clearACFSelection($field);
           } else {
               $attachments.find('.acf-gallery-attachment').removeClass('selected');
               selectedItems.clear();
-              clearACFSelection($field);
               selectionMode = 'toggle';
               $customButtons.find('a').removeClass('active');
               $(this).addClass('active');
@@ -590,6 +588,9 @@
 
       $customButtons.on('click', 'a.select-all', function(e) {
           e.preventDefault();
+          // Always close the sidebar first
+          clearACFSelection($field);
+
           resetSelectionState();
           $attachments.find('.acf-gallery-attachment').each(function() {
               $(this).addClass('selected');
@@ -599,6 +600,9 @@
 
       $customButtons.on('click', 'a.select-none', function(e) {
           e.preventDefault();
+          // Always close the sidebar first
+          clearACFSelection($field);
+
           $attachments.find('.acf-gallery-attachment').removeClass('selected');
           selectedItems.clear();
           resetSelectionState();
@@ -691,17 +695,31 @@
       // Handle attachment clicks
       $attachments.on('click', '.acf-gallery-attachment', function(e) {
           var $attachment = $(this);
+          var acfField = acf.getField($field);
 
-          if (!selectionMode && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
-              return;
-          }
-
+          // Don't interfere with the remove button
           if ($(e.target).hasClass('-cancel') || $(e.target).closest('a.-cancel').length) {
-              return;
+              return true;
           }
 
+          // If no selection mode is active and no modifier keys
+          if (!selectionMode && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+              // Clear our custom selections first
+              $attachments.find('.acf-gallery-attachment').removeClass('selected');
+              selectedItems.clear();
+              return true; // Let ACF handle the click
+          }
+
+          // We're in a selection mode or using modifier keys
           e.preventDefault();
           e.stopPropagation();
+
+          // Clear ACF's active selection state
+          $attachments.find('.acf-gallery-attachment').removeClass('active');
+          $field.find('.acf-gallery').removeClass('-edit');
+          if (acfField && typeof acfField.closeDialog === 'function') {
+              acfField.closeDialog();
+          }
 
           if (selectionMode === 'range') {
               if (!rangeStartItem) {
