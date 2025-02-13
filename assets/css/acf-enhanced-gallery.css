@@ -1,7 +1,12 @@
+.acf-gallery .acf-gallery-attachments {
+  bottom: 103px !important;
+}
+
 /* Toolbar Layout */
 .acf-gallery .acf-gallery-toolbar {
   padding: 15px;
   z-index: 2;
+  min-height: 73px !important;
 }
 
 .acf-gallery-toolbar .acf-hl {
@@ -9,6 +14,10 @@
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
+
+  &:before {
+    content: unset;
+  }
 }
 
 /* Enhanced Tools */
@@ -25,6 +34,10 @@
   height: auto;
   line-height: 1.4;
   white-space: nowrap;
+
+  @media screen and (max-width: 768px){
+    line-height: unset !important;
+  }
 }
 
 .acf-gallery .enhanced-tools .acf-button.active {
@@ -171,21 +184,60 @@
 }
 
 .acf-gallery-upload-progress {
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 3px;
-    background: #2271b1;
-    transition: width 0.3s ease-out;
-    width: 0;
-    z-index: 100;
+  position: absolute;  /* Change to absolute to position it on top of the gallery */
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: #2271b1;
+  transition: width 0.3s ease-out;
+  width: 0;
+  z-index: 9999;  /* Higher value to ensure it's on top of the gallery */
 }
 
 .acf-gallery-upload-progress.error {
-    background: #dc3232;
-    padding: 5px;
-    color: white;
-    text-align: center;
-    height: auto;
+  background: #dc3232;
+  padding: 5px;
+  color: white;
+  text-align: center;
+  height: auto;
 }
 
+.upload-progress-container {
+position: relative;  /* Ensure it's relative to the gallery container */
+margin: 10px 0;
+padding: 10px;
+background: #f0f0f1;
+border-radius: 4px;
+z-index: 1000;  /* Ensures the progress bar stays above the gallery */
+}
+
+.acf-gallery-upload-progress {
+background: #2271b1;
+height: 24px;
+margin-bottom: 5px;
+border-radius: 3px;
+transition: width 0.3s ease-out;
+position: relative;
+width: 0;
+}
+
+.acf-gallery-upload-progress .progress-text {
+position: absolute;
+left: 10px;
+right: 10px;
+top: 50%;
+transform: translateY(-50%);
+color: #fff;
+font-size: 12px;
+white-space: nowrap;
+overflow: hidden;
+text-overflow: ellipsis;
+}
+
+.acf-gallery-upload-progress.error {
+background: #dc3232;
+}
+
+.acf-gallery-upload-progress.success {
+background: #46b450;
+}
