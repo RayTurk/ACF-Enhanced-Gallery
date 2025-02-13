@@ -18,11 +18,10 @@
   var DEFAULT_ZOOM = 100;
   var MIN_ZOOM = 50;
   var MAX_ZOOM = 200;
+  var BATCH_SIZE = 3; // Number of files to upload simultaneously
 
   function enhanceGalleryField($el) {
-      console.log('Enhancing gallery field:', $el);
       var $field = $el.find('.acf-gallery').first();
-      console.log('Found gallery:', $field.length > 0);
 
       if (!$field.length || enhancedFields.has($field[0])) {
           return;
@@ -64,179 +63,229 @@
 
       // Get the field instance
       var field = acf.getField($field);
-      console.log('Field instance:', field);
 
-      // Safely check for and remove ACF's default click handler
-      try {
-          if (field) {
-              console.log('Removing click handler from field');
-              field.off('click', '.acf-gallery-add');
+      // Upload management
+      let uploadQueue = [];
+      let activeUploads = 0;
+      let totalFiles = 0;
+      let uploadedFiles = 0;
+      let $progressContainer = null;
+      let $progressBar = null;
+      let uploadCancelled = false;
+
+      async function processUploadQueue() {
+          if (uploadCancelled || uploadQueue.length === 0 || activeUploads >= BATCH_SIZE) {
+              return;
           }
 
-          // Safely check if gallery field type exists
-          if (acf.fields && acf.fields.gallery && acf.fields.gallery.prototype && acf.fields.gallery.prototype.events) {
-              console.log('Removing click handler from prototype');
-              acf.fields.gallery.prototype.events['click .acf-gallery-add'] = null;
-          } else {
-              console.log('ACF gallery field prototype not found, skipping prototype event removal');
+          while (uploadQueue.length > 0 && activeUploads < BATCH_SIZE) {
+              const nextFile = uploadQueue.shift();
+              activeUploads++;
+              uploadFile(nextFile).finally(() => {
+                  activeUploads--;
+                  processUploadQueue();
+              });
           }
-      } catch (e) {
-          console.log('Error handling event removal:', e);
       }
 
-      // Then update the click handler:
-      console.log('Adding new click handler to:', $field.find('.acf-gallery-add').length, 'elements');
+      async function uploadFile(file) {
+          const formData = new FormData();
+          formData.append('action', 'fsm_custom_gallery_upload_image');
+          formData.append('post_id', acf.get('post_id'));
+          formData.append('file', file);
 
-      // First, let's test with a very simple click handler
-      $field.find('.acf-gallery-add').on('click', function(e) {
-          console.log('Simple click handler triggered');
+          try {
+              const response = await $.ajax({
+                  url: ajaxurl,
+                  type: 'POST',
+                  data: formData,
+                  processData: false,
+                  contentType: false,
+                  xhr: function() {
+                      const xhr = new window.XMLHttpRequest();
+                      xhr.upload.addEventListener("progress", function(evt) {
+                          if (evt.lengthComputable) {
+                              // Individual file progress handled in overall count
+                          }
+                      }, false);
+                      return xhr;
+                  }
+              });
+
+              if (uploadCancelled) return;
+
+              let data;
+              if (typeof response === 'object') {
+                  data = response;
+              } else {
+                  const jsonStart = response.indexOf('{');
+                  const jsonEnd = response.lastIndexOf('}');
+                  if (jsonStart >= 0 && jsonEnd >= 0) {
+                      const jsonString = response.substring(jsonStart, jsonEnd + 1);
+                      data = JSON.parse(jsonString);
+                  } else {
+                      data = JSON.parse(response);
+                  }
+              }
+
+              if (data['attachment-id']) {
+                  uploadedFiles++;
+                  updateUploadProgress();
+                  addAttachmentToGallery(data);
+              }
+          } catch (error) {
+              console.error('Upload error:', error);
+              handleUploadError(error);
+          }
+      }
+
+      function updateUploadProgress() {
+          const percentComplete = (uploadedFiles / totalFiles) * 100;
+          $progressBar.css('width', percentComplete + '%');
+          $progressBar.find('.progress-text').text(
+              'Uploading ' + uploadedFiles + ' of ' + totalFiles + ' files (' + Math.round(percentComplete) + '%)'
+          );
+
+          if (uploadedFiles === totalFiles) {
+              handleUploadComplete();
+          }
+      }
+
+      function addAttachmentToGallery(data) {
+          if (!field) return;
+
+          const attachment = {
+              id: data['attachment-id'],
+              url: data['src'],
+              alt: data['alt'] || '',
+              title: data['title'] || '',
+              filename: data['filename'] || '',
+              type: 'image'
+          };
+
+          let $newAttachment;
+
+          if (typeof field.append === 'function') {
+              field.append(attachment);
+              $newAttachment = $field.find('.acf-gallery-attachment:last');
+              const scale = currentZoom / 100;
+              $newAttachment.css({
+                  'width': (160 * scale) + 'px',
+                  'height': (160 * scale) + 'px'
+              });
+          } else {
+              const currentVal = field.val() || [];
+              const newVal = typeof currentVal === 'string' ?
+                  (currentVal ? currentVal.split(',') : []) :
+                  [...currentVal];
+
+              newVal.push(data['attachment-id']);
+              field.val(newVal);
+
+              const scale = currentZoom / 100;
+              $newAttachment = $([
+                  '<div class="acf-gallery-attachment" data-id="' + data['attachment-id'] + '" style="width:' + (160 * scale) + 'px;height:' + (160 * scale) + 'px;">',
+                      '<input type="hidden" name="' + field.$input().attr('name') + '[]" value="' + data['attachment-id'] + '">',
+                      '<div class="margin">',
+                          '<div class="thumbnail">',
+                              '<img src="' + data['src'] + '" alt="">',
+                          '</div>',
+                      '</div>',
+                      '<div class="actions">',
+                          '<a href="#" class="acf-icon -cancel dark" data-id="' + data['attachment-id'] + '"></a>',
+                      '</div>',
+                  '</div>'
+              ].join(''));
+              $field.find('.acf-gallery-attachments').append($newAttachment);
+          }
+
+          if (selectionMode) {
+              $newAttachment.addClass('selected');
+              selectedItems.add($newAttachment[0]);
+          }
+
+          $newAttachment.find('a.acf-icon.-cancel').on('click', function(e) {
+              if (!e.originalEvent) {
+                  const $attachment = $(this).closest('.acf-gallery-attachment');
+                  selectedItems.delete($attachment[0]);
+              }
+          });
+      }
+
+      function handleUploadError(error) {
+          if (uploadCancelled) return;
+
+          $progressBar.addClass('error');
+          $progressBar.find('.progress-text').text('Upload failed: ' + error.message);
+
+          // Clear the upload queue
+          uploadQueue = [];
+          activeUploads = 0;
+
+          // Re-enable form submission
+          $field.closest('form').off('submit');
+      }
+
+      function handleUploadComplete() {
+          if (uploadCancelled) return;
+
+          $progressBar.addClass('success');
+          $progressBar.find('.progress-text').text('Upload Complete!');
+
+          // Re-enable form submission
+          $field.closest('form').off('submit');
+
+          setTimeout(() => {
+              $progressContainer.fadeOut(() => {
+                  $(this).remove();
+                  updateZoom(currentZoom);
+                  field.$input().trigger('change');
+              });
+          }, 2000);
+      }
+
+      // Single click handler for Add to Gallery
+      $field.find('.acf-gallery-add').off('click').on('click', function(e) {
           e.preventDefault();
           e.stopPropagation();
 
-          // Create a hidden file input
-          var $fileInput = $('<input type="file" multiple accept="image/*" style="display:none">');
-          console.log('File input created');
+          const $fileInput = $('<input type="file" multiple accept="image/*" style="display:none">');
 
-          // Add to DOM and trigger click
-          $fileInput.appendTo('body').trigger('click');
-          console.log('File input added to DOM and clicked');
-          e.preventDefault();
-          e.stopPropagation();
-
-          // Create a hidden file input
-          var $fileInput = $('<input type="file" multiple accept="image/*" style="display:none">');
-
-          // Add to DOM and trigger click
-          $fileInput.appendTo('body').trigger('click');
-
-          // Handle file selection
           $fileInput.on('change', function(e) {
               e.preventDefault();
               e.stopPropagation();
+              e.stopImmediatePropagation();
 
-              var files = e.target.files;
-              var postId = acf.get('post_id');
-
+              const files = e.target.files;
               if (!files || !files.length) {
                   $fileInput.remove();
                   return;
               }
 
-              // Create progress container
-              var $progressContainer = $('<div class="upload-progress-container"></div>');
-              $field.find('.acf-gallery-attachments').before($progressContainer);
+              // Reset upload state
+              uploadQueue = Array.from(files);
+              totalFiles = files.length;
+              uploadedFiles = 0;
+              activeUploads = 0;
+              uploadCancelled = false;
 
-              // Upload each file
-              Array.from(files).forEach(function(file, index) {
-                  var $progress = $('<div class="acf-gallery-upload-progress"><div class="progress-text">' + file.name + ': 0%</div></div>');
-                  $progressContainer.append($progress);
-
-                  var formData = new FormData();
-                  formData.append('action', 'fsm_custom_gallery_upload_image');
-                  formData.append('post_id', postId);
-                  formData.append('file', file);
-
-                  $.ajax({
-                      url: ajaxurl,
-                      type: 'POST',
-                      data: formData,
-                      processData: false,
-                      contentType: false,
-                      xhr: function() {
-                          var xhr = new window.XMLHttpRequest();
-                          xhr.upload.addEventListener("progress", function(evt) {
-                              if (evt.lengthComputable) {
-                                  var percentComplete = evt.loaded / evt.total * 100;
-                                  $progress.css('width', percentComplete + '%');
-                                  $progress.find('.progress-text').text(file.name + ': ' + Math.round(percentComplete) + '%');
-                              }
-                          }, false);
-                          return xhr;
-                      },
-                      success: function(response) {
-                          try {
-                              console.log('Upload response:', response);
-                              var data = JSON.parse(response);
-                              if (data['attachment-id']) {
-                                  // Create the attachment element
-                                  var attachment = {
-                                      id: data['attachment-id'],
-                                      url: data['src'],
-                                      alt: data['alt'] || '',
-                                      title: data['title'] || '',
-                                      filename: data['filename'] || '',
-                                      type: 'image'
-                                  };
-
-                                  console.log('Adding attachment:', attachment);
-
-                                  // Try different methods to add the attachment
-                                  if (field && typeof field.add === 'function') {
-                                      console.log('Using field.add method');
-                                      field.add(attachment);
-                                  } else if (acf.fields && acf.fields.gallery && typeof acf.fields.gallery.prototype.add === 'function') {
-                                      console.log('Using prototype.add method');
-                                      acf.fields.gallery.prototype.add.call(field, attachment);
-                                  } else {
-                                      // Fallback: manually create and append the attachment HTML
-                                      console.log('Using manual append method');
-                                      var $attachment = $([
-                                          '<div class="acf-gallery-attachment" data-id="' + attachment.id + '">',
-                                              '<input type="hidden" name="' + field.$input().attr('name') + '[]" value="' + attachment.id + '">',
-                                              '<div class="margin" title="">',
-                                                  '<div class="thumbnail">',
-                                                      '<img src="' + attachment.url + '" alt="' + attachment.alt + '">',
-                                                  '</div>',
-                                                  '<div class="filename">' + attachment.filename + '</div>',
-                                              '</div>',
-                                              '<div class="actions">',
-                                                  '<a href="#" class="acf-icon -cancel dark" data-id="' + attachment.id + '"></a>',
-                                              '</div>',
-                                          '</div>'
-                                      ].join(''));
-
-                                      $field.find('.acf-gallery-attachments').append($attachment);
-                                  }
-
-                                  // Show success
-                                  $progress.addClass('success');
-                                  $progress.find('.progress-text').text(file.name + ': Complete');
-
-                                  // Trigger change event
-                                  if (field && field.$input) {
-                                      field.$input().trigger('change');
-                                  }
-                              }
-                          } catch(e) {
-                              console.error('Upload response error:', e);
-                              console.error('Response data:', response);
-                              $progress.addClass('error');
-                              $progress.find('.progress-text').text(file.name + ': Failed - ' + e.message);
-                          }
-                      },
-                      error: function(xhr, status, error) {
-                          console.error('Upload failed:', error);
-                          $progress.addClass('error');
-                          $progress.find('.progress-text').text(file.name + ': Failed - ' + error);
-                      },
-                      complete: function() {
-                          // Remove progress bar after delay
-                          setTimeout(function() {
-                              $progress.fadeOut(function() {
-                                  $(this).remove();
-                                  // Remove container if empty
-                                  if ($progressContainer.children().length === 0) {
-                                      $progressContainer.remove();
-                                  }
-                              });
-                          }, 2000);
-                      }
-                  });
+              // Prevent form submission during upload
+              $field.closest('form').on('submit', function(e) {
+                  e.preventDefault();
+                  return false;
               });
 
-              // Remove the file input
-              $fileInput.remove();
+              // Create progress UI
+              $progressContainer = $('<div class="upload-progress-container"></div>');
+              $progressBar = $('<div class="acf-gallery-upload-progress"><div class="progress-text">Preparing to upload ' + totalFiles + ' files...</div></div>');
+              $progressContainer.append($progressBar);
+              $field.find('.acf-gallery-attachments').before($progressContainer);
+
+              // Start processing the queue
+              processUploadQueue();
           });
+
+          $fileInput.appendTo('body').trigger('click');
       });
 
       // Initialize zoom
@@ -287,17 +336,13 @@
           var acfField = acf.getField($field);
           if (!acfField) return;
 
-          // Get the original sortable instance
           var $sortable = $attachments;
 
-          // Wait for ACF to fully initialize
           setTimeout(function() {
-              // Remove existing sortable if present
               if ($sortable.hasClass('ui-sortable')) {
                   $sortable.sortable('destroy');
               }
 
-              // Initialize enhanced sortable
               $sortable.sortable({
                   items: '.acf-gallery-attachment',
                   cursor: 'move',
@@ -306,12 +351,10 @@
                   helper: function(e, $item) {
                       var $selectedItems = $attachments.find('.selected');
 
-                      // If dragged item isn't selected, only drag that item
                       if (!$item.hasClass('selected')) {
                           return $item;
                       }
 
-                      // Create helper with visual feedback
                       var $helper = $('<div class="acf-gallery-sort-helper"/>')
                           .css({
                               width: $item.outerWidth(),
@@ -322,7 +365,6 @@
                               overflow: 'hidden'
                           });
 
-                      // Add first image and count badge
                       var totalSelected = $selectedItems.length;
                       $helper.append($item.find('img').clone().css({
                           width: '100%',
@@ -346,8 +388,10 @@
                               }));
                       }
 
-                      // Store selected items (excluding dragged item)
-                      var $others = $selectedItems.not($item);
+                      var $others = $selectedItems.not($item).sort(function(a, b) {
+                          return $(a).index() - $(b).index();
+                      });
+
                       if ($others.length) {
                           $item.data('selectedAttachments', $others);
                           $others.hide();
@@ -359,14 +403,12 @@
                       var $item = ui.item;
                       var $selected = $item.data('selectedAttachments');
 
-                      // Style the placeholder
                       ui.placeholder.css({
                           width: $item.outerWidth(),
                           height: $item.outerHeight(),
                           margin: $item.css('margin')
                       }).addClass('acf-gallery-attachment');
 
-                      // Create placeholders for additional selected items
                       if ($selected && $selected.length) {
                           for (var i = 0; i < $selected.length; i++) {
                               ui.placeholder.clone()
@@ -378,23 +420,22 @@
                       var $item = ui.item;
                       var $selected = $item.data('selectedAttachments');
 
-                      // Move all selected items to new position
                       if ($selected && $selected.length) {
-                          $selected.insertAfter($item).show();
+                          var $lastItem = $item;
+                          $selected.each(function() {
+                              $(this).insertAfter($lastItem).show();
+                              $lastItem = $(this);
+                          });
                           $item.removeData('selectedAttachments');
                       }
 
-                      // Remove extra placeholders
                       $('.ui-sortable-placeholder').remove();
-
-                      // Trigger change for ACF
                       acfField.$input().trigger('change');
                   }
               });
           }, 100);
       }
 
-      // Initialize sortable when field is ready
       initSortable();
 
       // Handle sorting
@@ -411,21 +452,15 @@
                   case 'date':
                       return parseInt(id) || 0;
                   case 'modified':
-                      // Extract timestamp from filename if available
                       var imgSrc = $element.find('img').attr('src');
                       var timestamp = imgSrc.match(/\/(\d+)_/);
                       return timestamp ? parseInt(timestamp[1]) : parseInt(id);
                   case 'title':
                       var imgSrc = $element.find('img').attr('src');
                       if (!imgSrc) return '';
-
-                      // Extract filename from URL and remove dimensions
                       var filename = imgSrc.split('/').pop();
-                      // Remove the dimensions part (e.g., -260x300)
                       filename = filename.replace(/-\d+x\d+/, '');
-                      // Remove the extension
                       filename = filename.replace(/\.[^/.]+$/, '');
-                      // Remove the timestamp prefix if it exists (e.g., 1735952224_)
                       filename = filename.replace(/^\d+_/, '');
                       return filename.toLowerCase();
                   default:
@@ -449,14 +484,13 @@
                       if (!valueB) return -1;
                       return valueA.localeCompare(valueB);
                   } else {
-                      return valueB - valueA; // Descending order for dates
+                      return valueB - valueA;
                   }
               });
 
               return itemsArray;
           }
 
-          // If no selection, sort entire gallery
           var $itemsToSort = selectedItems.size === 0
               ? $attachments.find('.acf-gallery-attachment')
               : $attachments.find('.acf-gallery-attachment.selected');
@@ -468,7 +502,6 @@
               sortedItems = sortAttachments($itemsToSort, val);
           }
 
-          // Apply the new order
           if (selectedItems.size > 0) {
               var originalPositions = [];
               $itemsToSort.each(function() {
@@ -500,7 +533,6 @@
           acf.getField($field).$input().trigger('change');
       });
 
-      // Function to clear ACF's native selection state
       function clearACFSelection($field) {
           $field.find('.acf-gallery-attachment.active').removeClass('active');
           $field.removeClass('-edit');
@@ -567,9 +599,13 @@
 
           if (confirm(acfEnhancedGalleryL10n.deleteConfirm.replace('%d', count))) {
               selectedItems.forEach(function(item) {
-                  $(item).find('a.acf-icon.-cancel').trigger('click');
+                  if ($(item).length) {
+                      $(item).find('a.acf-icon.-cancel').trigger('click');
+                  }
               });
+
               selectedItems.clear();
+              $('.acf-gallery').trigger('update');
           }
       });
 
@@ -577,12 +613,10 @@
       $attachments.on('click', '.acf-gallery-attachment', function(e) {
           var $attachment = $(this);
 
-          // If no selection mode is active, let ACF handle the click
           if (!selectionMode && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
               return;
           }
 
-          // Don't interfere with the remove button
           if ($(e.target).hasClass('-cancel') || $(e.target).closest('a.-cancel').length) {
               return;
           }
@@ -629,7 +663,6 @@
 
   // Initialize when ACF is ready
   acf.addAction('ready', function($el) {
-      console.log('ACF ready event fired');
       $('.acf-field-gallery').each(function() {
           enhanceGalleryField($(this));
       });

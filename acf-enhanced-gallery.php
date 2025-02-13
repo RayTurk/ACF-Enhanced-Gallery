@@ -214,5 +214,5 @@ if (!function_exists('fsm_custom_gallery_shortcode')) {
 
     return $output;
   }
-  add_shortcode('fsm_gallery', 'fsm_custom_gallery_shortcode');
+  add_shortcode('fsm_gallery_custom', 'fsm_custom_gallery_shortcode');
 }
