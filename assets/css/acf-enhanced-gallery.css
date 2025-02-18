@@ -261,3 +261,9 @@ background: #46b450;
   visibility: hidden;
   opacity: 0;
 }
+
+tr.compat-field-imagify {
+  display: none;
+  visibility: hidden;
+  opacity: 0;
+}
