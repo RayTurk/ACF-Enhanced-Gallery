@@ -267,3 +267,9 @@ tr.compat-field-imagify {
   visibility: hidden;
   opacity: 0;
 }
+
+.acf-gallery-side-data .media-types-required-info {
+  display: none;
+  visibility: hidden;
+  opacity: 0;
+}
